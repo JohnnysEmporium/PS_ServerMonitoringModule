@@ -38,6 +38,6 @@ Arguments in **[ ]** brackets are optional
 
 #### Check free disk space
 
-`checkDisk "ServerName" ["DiskLetter"]`
+`checkDisk "ServerName"'
 
 
