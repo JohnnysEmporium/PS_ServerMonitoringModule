@@ -100,9 +100,7 @@ function checkDisk{
 
     param($ServerName)
 
-    $new_session = New-PSSession -ComputerName $ServerName
-
-    $with_separator = Invoke-Command -Session $new_session -ScriptBlock{
+    Invoke-Command -ScriptBlock{
         $disksPS = @(Get-PSDrive -PSProvider FileSystem)
         $disksWMI = @(Get-WmiObject -Class Win32_logicaldisk -Filter "DriveType = '3'")
         $disksPS = @($disksPS | Where-Object -property used -ne 0)
@@ -134,5 +132,5 @@ function checkDisk{
         )
         $tables | Format-Table "Drive","Drive Name","Space Total (GB)","Space Free (GB)", "Space Used (GB)","Space Used (%)" -AutoSize
         ($tables | Format-Table -Property $p | out-string -stream).Replace(" ","_")
-    }
+    } $ServerName
 }
