@@ -71,7 +71,6 @@ function runCMD{
 
 function ovc{
 
-
     param($ServerName, $Parameter)
 
     Invoke-Command -ScriptBlock{
@@ -82,29 +81,58 @@ function ovc{
 
 function simba{
 
-    param($ServerName, $Instance)
+    param($ServerName, $Instance=$Null)
 
-    $Instance = $Instance.ToUpper()
-
-    Invoke-Command -ScriptBlock{
-        "C:\Appli\Simba\Monitor\ScapSimbaMonitor.exe | find `"$Using:Instance`"" | cmd
-    }$ServerName
+    if($Instance){
+        $Instance = $Instance.ToUpper()
+        Invoke-Command -ScriptBlock{
+            "C:\Appli\Simba\Monitor\ScapSimbaMonitor.exe | find `"$Using:Instance`"" | cmd
+        }$ServerName
+    } else {
+        Invoke-Command -ScriptBlock{
+            "C:\Appli\Simba\Monitor\ScapSimbaMonitor.exe" | cmd
+        }$ServerName
+    }
 }
 
 
 function checkDisk{
 
-    param($ServerName, $Disk = $null)
-  
-    Invoke-Command -ScriptBlock{
-        $disk = $Using:Disk
-        $drive = Get-PSDrive $Using:Disk
-        
-        if($Using:Disk){
-            $disk = $disk.ToUpper()
-            $spaceLeft = [math]::abs((($drive.Free/($drive.Used+$drive.Free))*100-100))
-            $spaceLeft = [math]::Round($spaceLeft,1)
-            Write-Host ("Disk {0}:\ is {1}% full" -f $disk, $spaceLeft)
+    param($ServerName)
+
+    $new_session = New-PSSession -ComputerName $ServerName
+
+    $with_separator = Invoke-Command -Session $new_session -ScriptBlock{
+        $disksPS = @(Get-PSDrive -PSProvider FileSystem)
+        $disksWMI = @(Get-WmiObject -Class Win32_logicaldisk -Filter "DriveType = '3'")
+        $disksPS = @($disksPS | Where-Object -property used -ne 0)
+        $tables = @()
+        $count = 0
+
+        For($i = 0; $i -lt $disksPS.Length; $i++){
+            $spFree = [math]::Round($disksPS[$i].free/1GB,1)
+            $spUsed = [math]::Round($disksPS[$i].used/1GB,1)
+            $table = New-Object PSObject -property @{
+                "Drive" = $disksPS[$i].Name;
+                "Drive Name" = $disksWMI[$i].VolumeName;
+                "Space Total (GB)" = $spUsed + $spFree;
+                "Space Used (GB)" = $spUsed;
+                "Space Free (GB)" = $spFree;
+                "Space Used (%)" = [math]::Round(-100*$spFree/($spFree + $spUsed) + 100, 1);
+            }
+            $tables += $table
         }
-    }$ServerName
+        $p = `
+        @(
+            @{n="Drive    "; e={$_.Drive}; align="left"}
+            @{n="Drive Name    "; e={$_."Drive Name"}; align="left"}
+            @{n="Space Total (GB)    "; e={$_."Space Total (GB)"}; align="left"}
+            @{n="Space Used (GB)    "; e={$_."Space Used (GB)"}; align="left"}
+            @{n="Space Free (GB)    "; e={$_."Space Free (GB)"}; align="left"}
+            @{n="Space Used (%)    "; e={$_."Space Used (%)"}; align="left"}
+                      
+        )
+        $tables | Format-Table "Drive","Drive Name","Space Total (GB)","Space Free (GB)", "Space Used (GB)","Space Used (%)" -AutoSize
+        ($tables | Format-Table -Property $p | out-string -stream).Replace(" ","_")
+    }
 }
