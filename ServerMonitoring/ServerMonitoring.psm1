@@ -3,10 +3,18 @@ function startService{
     param($ServerName, $ServiceName)
      
     Invoke-Command -ScriptBlock{
-        start-Service $Using:ServiceName -PassThru
+        
+        $ServiceStatus = (Get-Service $Using:ServiceName).Status
+        
+        if(Compare-Object $ServiceStatus "Running"){
+            Write-Host "$Using:ServiceName is stopped, attempting to start"
+            Start-Service $Using:ServiceName -PassThru
+        } else {
+            Write-Host "$Using:ServiceName is $ServiceStatus"
+        }
+
     } $ServerName | fl -Property PSComputerName,Name,DisplayName,Status
 }
-
 
 function stopService{
 
@@ -20,29 +28,64 @@ function stopService{
 function cpuUsage{
 
     param($ServerName)
-    $i = 0
-    $j = 10
 
     Invoke-Command -ScriptBlock{
+
+        $p = @(
+                @{n="PID    "; e={$_.Id}; align="left"}
+                @{n="Process Name    "; e={$_."ProcessName"}; align="left"}
+                @{n="CPU Usage    "; e={$_."CPU"}; align="left"}
+            )
 	
-        $array = New-Object System.Collections.Generic.List[System.Object]
-        $i = 0
+        $arrayUsage = New-Object System.Collections.Generic.List[System.Object]
+        $arrayProcessBig = New-Object System.Collections.Generic.List[System.Object]
+        $topConsuming = Get-Process | Sort CPU -Descending | Select -first 10 -Property Id,ProcessName,CPU
         $j = 10
 
-        while($i -lt $j){
 
+#Data collection
+
+        for($i = 0; $i -lt $j; $i++){
+            
             $progress = (100/$j)*$i
             Write-Progress -Activity "Gathering CPU Load data to determine average usage" -Status "$progress%" -PercentComplete $progress;
             
             $processor = (Get-WmiObject win32_processor | Measure-Object -property LoadPercentage -Average | Select Average).Average
-            $array.Add($processor)
+            $arrayUsage.Add($processor)
 
-            $i++
+            $arrayProcessSmall = New-Object System.Collections.Generic.List[System.Object]
+
+            foreach($z in $topConsuming){
+                $temp = Get-Process -Id $z.Id | Select -Property Id,ProcessName,CPU
+                $arrayProcessSmall.Add($temp)
+            }
+
+            $arrayProcessBig.Add($arrayProcessSmall)
+
             Start-Sleep -s .5
         }
 
-        Write-Host $topConsuming
-        Write-Host "`nCPU average usage during last 5 seconds:" ("{0}{1}" -f ($array | Measure-Object -Average).average, "%")
+       
+#Data representation
+
+        for($i = 0; $i -lt $arrayProcessSmall.Count; $i++){
+            
+            $avg = New-Object System.Collections.Generic.List[System.Object]
+
+            foreach($ProcessBig in $arrayProcessBig){
+                $avg.Add($ProcessBig[$i].CPU)
+            }
+
+            $avg = $avg | Measure-Object -Average
+            $topConsuming[$i].CPU = [math]::Round($avg.Average,0)
+
+        }
+
+
+
+        Write-Host "`n`nCPU average usage:" ("{0}{1}" -f ([math]::Round(($arrayUsage | Measure-Object -Average).average,1)), "%") "`n"
+        ($topConsuming | Sort CPU -Descending | Select -First 3 | ft -Property $p -AutoSize | out-string -stream).Replace(" ", "_")
+        $topConsuming | Sort CPU -Descending | Select -First 3 | ft -AutoSize
 
     } $ServerName
 }
@@ -53,7 +96,8 @@ function getText{
     param($ServerName, $Location)
 
     Invoke-Command -ScriptBlock{
-        Get-ItemProperty $Using:Location | Select LastWriteTime
+        Get-ItemProperty $Using:Location | Select-Object -Property LastWriteTime
+        Write-Host "`nCONTENT:`n"
         Get-Content -Path $Using:Location
     } $ServerName
 }
