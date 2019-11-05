@@ -84,7 +84,7 @@ function cpuUsage{
 
 
         Write-Host "`n`nCPU average usage:" ("{0}{1}" -f ([math]::Round(($arrayUsage | Measure-Object -Average).average,1)), "%") "`n"
-        Write-Host "Top 3 CPU consuming processes:`n"
+        Write-Host "Top 3 CPU consuming processes:"
         ($topConsuming | Sort CPU -Descending | Select -First 3 | ft -Property $p -AutoSize | out-string -stream).Replace(" ", "_")
         $topConsuming | Sort CPU -Descending | Select -First 3 | ft -AutoSize
 
