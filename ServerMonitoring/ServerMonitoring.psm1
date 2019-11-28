@@ -5,10 +5,11 @@ function startService{
     Invoke-Command -ScriptBlock{
         
         $ServiceStatus = (Get-Service $Using:ServiceName).Status
+        $ServiceName = (Get-Service $Using:ServiceName).Name
         
         if(Compare-Object $ServiceStatus "Running"){
-            Write-Host "$Using:ServiceName is stopped, attempting to start"
-            Start-Service $Using:ServiceName -PassThru
+            Write-Host "$ServiceName is stopped, attempting to start"
+            Start-Service $ServiceName -PassThru
         } else {
             Write-Host "$Using:ServiceName is $ServiceStatus"
         }
@@ -114,13 +115,22 @@ function runCMD{
 } 
 
 
-function ovc{
+function checkOVC{
 
-    param($ServerName, $Parameter)
+    param($ServerName)
 
-    Invoke-Command -ScriptBlock{
-        "ovc -$Using:Parameter" | cmd
-    }$ServerName
+    $status = Invoke-Command -ScriptBlock{
+                  "ovc -status" | cmd
+              }$ServerName 
+
+    if($status | Select-String -Pattern "Stopped"){
+        Invoke-Command -ScriptBlock{
+            Write-Warning "It appears that some agents are stopped, running ovc -restart"
+            "ovc -restart & ovc -status" | cmd
+        }$ServerName
+    } else {
+        $status
+    }
 }  
 
 
