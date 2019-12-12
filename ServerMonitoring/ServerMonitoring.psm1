@@ -7,13 +7,18 @@ function startService{
         $ServiceStatus = (Get-Service $Using:ServiceName).Status
         $ServiceName = (Get-Service $Using:ServiceName).Name
         
-        if(Compare-Object $ServiceStatus "Running"){
-            Write-Host "$ServiceName is stopped, attempting to start"
-            Start-Service $ServiceName -PassThru
-        } else {
-            Write-Host "$Using:ServiceName is $ServiceStatus"
+        
+        try{  
+            if(Compare-Object $ServiceStatus "Running"){
+                Write-Host "$ServiceName is stopped, attempting to start`n"
+                Start-Service -name $ServiceName -PassThru -ErrorAction Stop
+            } else {
+                Write-Host "$Using:ServiceName is $ServiceStatus"
+            }
+        } catch {
+            Write-Host $PSItem.Exception.InnerException
         }
-
+#    } $ServerName
     } $ServerName | fl -Property PSComputerName,Name,DisplayName,Status
 }
 
@@ -65,10 +70,9 @@ function cpuUsage{
                 @{n="CPU Usage    "; e={$_."Value"}; align="left"}
             )
 	
-        $arrayUsage = New-Object System.Collections.Generic.List[System.Object]
         $arrayProcessBig = New-Object System.Collections.Generic.List[System.Object]
         $arrayProcessSmall = New-Object System.Collections.Generic.List[System.Object]
-        $j = 5
+        $j = 10
 
 #Data collection
 
@@ -76,15 +80,13 @@ function cpuUsage{
             $progress = (100/$j)*$i
             Write-Progress -Activity "Gathering CPU Load data to determine average usage" -Status "$progress%" -PercentComplete $progress;
 
-            $topConsuming = Get-WmiObject -class Win32_PerfFormattedData_PerfProc_Process | Select-Object IDProcess, Name, PercentProcessorTime
-            
-            $processor = (Get-WmiObject win32_processor | Measure-Object -property LoadPercentage -Average | Select Average).Average
-            $arrayUsage.Add($processor)
+            $topConsuming = Get-WmiObject -class Win32_PerfFormattedData_PerfProc_Process | Select-Object IDProcess, Name, PercentProcessorTime, PercentUserTime
 
             $arrayProcessBig.Add($topConsuming)
         }
-       
+
 #Data representation
+
 
         foreach($processBig in $arrayProcessBig){
             $arrayProcessSmall += $processBig
@@ -95,22 +97,26 @@ function cpuUsage{
         $processNames | foreach{$processHash[$_] = 0}
         
         foreach($process in $arrayProcessSmall){
-            $processHash[$process.Name] += $process.PercentProcessorTime
+            $processHash[$process.Name] += $process.PercentUserTime
         }
-
-        $processHash.Remove("_Total")
-        $processHash.Remove("Idle")
-        
+                
         foreach($process in @($processHash.keys)){
             $processHash[$process] = [math]::Round($processHash[$process]/$j, 1)
         }
+
+        $total = $processHash["_Total"]
+        $processHash.Remove("_Total")
+        $processHash.Remove("Idle")
         
-        Write-Host "`n`nCPU average usage:" ("{0}{1}" -f ([math]::Round(($arrayUsage | Measure-Object -Average).average,1)), "%") "`n"
-        Write-Host "Top 5 CPU consuming processes:"
+        Write-Host "CPU average usage:" ("{0}{1}" -f [math]::Round($total,1), "%") "`n`n"
+        Write-Host "Top 5 CPU consuming processes" ("{0}{1}" -f "[",$j) "samples]:"  
         #($topConsuming | Sort CPU -Descending | Select -First 3 | ft -Property $p -AutoSize | out-string -stream).Replace(" ", "_")
         #$topConsuming | Sort CPU -Descending | Select -First 3 | ft -AutoSize
-
-        ($processHash.GetEnumerator() | Sort "Value" -Descending | Select -First 5 | ft -Property $p -AutoSize | out-string -stream).Replace(" ", "_")
+        try{
+            ($processHash.GetEnumerator() | Sort "Value" -Descending | Select -First 5 | ft -Property $p -AutoSize | out-string -stream).Replace(" ", "_")
+        } catch {
+            ($processHash.GetEnumerator() | Sort "Value" -Descending | Select -First 5 | ft -Property $p -AutoSize | out-string -stream) -Replace(" ", "_")
+        }
 
     } $ServerName
 }
