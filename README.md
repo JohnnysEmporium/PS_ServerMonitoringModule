@@ -34,7 +34,7 @@ Arguments in **[ ]** brackets are optional
 
 #### Check SCAP Simba Instances
 
-`simba "ServerName" ["InstanceName"]` 
+`simba "ServerName" "InstanceName"` 
 
 #### Check free disk space
 
