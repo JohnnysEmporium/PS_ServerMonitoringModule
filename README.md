@@ -19,6 +19,7 @@ Arguments in **[ ]** brackets are optional
 #### Starting/Stopping a service
 
 `startService "ServerName" "ServiceDisplayName"`
+`stopService "ServerName" "ServiceDisplayName"`
 
 #### Dsiaply CPU usage
 
